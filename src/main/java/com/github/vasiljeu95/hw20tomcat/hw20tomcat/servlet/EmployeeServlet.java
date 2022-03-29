@@ -1,6 +1,7 @@
 package com.github.vasiljeu95.hw20tomcat.hw20tomcat.servlet;
 
 import com.github.vasiljeu95.hw20tomcat.hw20tomcat.model.Employee;
+import com.github.vasiljeu95.hw20tomcat.hw20tomcat.model.JDBSHelper;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -21,59 +22,54 @@ public class EmployeeServlet extends HttpServlet {
     public static final String USER = "root";
     public static final String PASSWORD = "root1234";
 
+    private static final String SQL_INSERT_REQUEST = "INSERT INTO employee VALUES (?, ?, ?, ?, ?, ?, ?)";
     private static Connection connection;
-    private static PreparedStatement preparedStatement;
-
     private final List<Employee> employees = new ArrayList<>();
 
-    @Override
-    public void init() throws ServletException {
+    {
         employees.add(new Employee(1, "Stepan", "Vasilyeu", 27, "Office", "Engineer", 500));
         employees.add(new Employee(2, "Dmitriy", "Kozlov", 37, "Office", "Sales manager", 700));
         employees.add(new Employee(3, "Ivan", "Savich", 32, "IBS", "Electrician", 500));
         employees.add(new Employee(4, "Oleh", "Vakylchik", 34, "IBS", "Plumber", 500));
         employees.add(new Employee(5, "Nikolay", "Savitski", 33, "IBS", "Fitter", 500));
 
-        employees.forEach(employee -> {
-            try {
-                Class.forName("com.mysql.cj.jdbc.Driver");
-                connection = DriverManager.getConnection(URL, USER, PASSWORD);
-                preparedStatement = connection.prepareStatement(URL);
-                preparedStatement.execute("INSERT INTO employee " +
-                        "VALUES (" + employee.getId() + ", '" + employee.getFirstName() + "', '" + employee.getSecondName() +
-                        "', " + employee.getAge() + ", '" + employee.getDepartment() +
-                        "', '" + employee.getPosition() + "', " + employee.getSalary() + ");"
-                );
-            } catch (SQLException | ClassNotFoundException exception) {
-                System.out.println("Something wrong in init!");
-                exception.printStackTrace();
-            }
-        });
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+
+            connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            connection.setAutoCommit(false);
+        } catch (ClassNotFoundException | SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        resp.setContentType("application/json");
-        PrintWriter writer = resp.getWriter();
-
+    public void init() {
         try {
-            ResultSet resultSet = preparedStatement.executeQuery("select * from employee");
-            while (resultSet.next()) {
-                String jsonText = String.format("id: %d, firstName: %s, secondName: %s, age: %d," +
-                                " department: %s, position: %s, salary: %d.\n",
-                        resultSet.getLong(1), resultSet.getString(2),
-                        resultSet.getString(3), resultSet.getLong(4),
-                        resultSet.getString(5), resultSet.getString(6),
-                        resultSet.getLong(7));
-
-                writer.print(jsonText);
-                writer.flush();
+            PreparedStatement preparedStatement = connection.prepareStatement(SQL_INSERT_REQUEST);
+            for (Employee employee : employees) {
+                preparedStatement.setLong(1, employee.getId());
+                preparedStatement.setString(2, employee.getFirstName());
+                preparedStatement.setString(3, employee.getSecondName());
+                preparedStatement.setLong(4, employee.getAge());
+                preparedStatement.setString(5, employee.getDepartment());
+                preparedStatement.setString(6, employee.getPosition());
+                preparedStatement.setLong(7, employee.getSalary());
+                preparedStatement.execute();
             }
+            preparedStatement.close();
+            connection.commit();
         } catch (SQLException exception) {
-            System.out.println("Something wrong in doGet!");
+            System.out.println("Something wrong in init!");
             exception.printStackTrace();
         }
-        writer.close();
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.setContentType("application/json");
+
+        JDBSHelper.resultSQLRequest(connection, resp);
     }
 
     @Override
@@ -81,7 +77,6 @@ public class EmployeeServlet extends HttpServlet {
         try {
             employees.clear();
             connection.close();
-            preparedStatement.close();
         } catch (SQLException exception) {
             exception.printStackTrace();
         }
